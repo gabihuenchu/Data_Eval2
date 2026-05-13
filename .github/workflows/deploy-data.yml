@@ -1,0 +1,37 @@
+name: Deploy MySQL Data Layer
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Copy SQL scripts to EC2 Data
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_DATA_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "01_creacion_base_datos.sql"
+          target: "/home/${{ secrets.EC2_USER }}/sql/"
+      
+      - name: Execute SQL on EC2 Data
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_DATA_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            docker ps | grep mysql-data || docker run -d \
+              --name mysql-data \
+              -e MYSQL_ROOT_PASSWORD=root123 \
+              -e MYSQL_DATABASE=proyecto_db \
+              -p 3306:3306 \
+              -v mysql_data:/var/lib/mysql \
+              mysql:8.0
+            sleep 15
+            docker exec -i mysql-data mysql -u root -proot123 proyecto_db < /home/${{ secrets.EC2_USER }}/sql/01_creacion_base_datos.sql
